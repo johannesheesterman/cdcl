@@ -20,6 +20,31 @@
         xs.items[xs.count++] = x; \
     } while(0); \
 
+#define da_insert(xs, x, i) \
+    do { \
+        if (xs.count >= xs.capacity) { \
+            if (xs.capacity == 0) xs.capacity = 256; \
+            else xs.capacity *= 2; \
+            xs.items = realloc(xs.items, xs.capacity * sizeof(*xs.items)); \
+        } \
+        for (size_t j = xs.count; j > i; j--) { \
+            xs.items[j] = xs.items[j - 1]; \
+        } \
+        xs.items[i] = x; \
+        xs.count++; \
+    } while(0); \
+
+#define da_remove(xs, x) \
+    do { \
+        for (size_t i = 0; i < xs.count; i++) { \
+            if (xs.items[i] == x) { \
+                xs.items[i] = xs.items[xs.count - 1]; \
+                xs.count--; \
+                break; \
+            } \
+        } \
+    } while(0); \
+
 struct Clause {
     int *literals;
     int size;
@@ -109,71 +134,61 @@ int unassigned_literal(struct Clause* clause , struct Assignment** assignments) 
 
 struct UnitPropagationResult unit_propagation(struct CdclState* state, struct LiteralList* to_propagate) {
 
-    int i = 0;
-    while (i < to_propagate->count) {
-        int watching_literal = -to_propagate->items[i];
-        int abs_lit = abs(to_propagate->items[i]);
+    while (to_propagate->count > 0) {
+        int watching_literal = -to_propagate->items[0];
+        da_remove((*to_propagate), to_propagate->items[0]);
 
-        struct Clauses* watching_clauses = &state->lit2Clauses[abs_lit];
+        struct Clauses* watching_clauses = state->lit2Clauses[get_lit2Clauses_ix(watching_literal)];
+  
 
         for (int j = 0; j < watching_clauses->count; j++) {
-            struct Clause* watching_clause = &watching_clauses->items[j];
+            struct Clause* watching_clause = watching_clauses->items[j];
 
             for (int k = 0; k < watching_clause->size; k++) {
                 int lit = watching_clause->literals[k];
+                int abs_lit = abs(lit);
 
                 if (watching_clause->litWatch1 == lit || watching_clause->litWatch2 == lit) {
-                    continue;
+                    continue;                    
                 }
-                else if (state->assignments[abs(lit)] != NULL && state->assignments[abs(lit)]->value == false) {
+                else if (state->assignments[abs_lit] != NULL && state->assignments[abs_lit]->value == lit > 0) {
                     continue;
                 }
                 else {
                     // Swap watching_lit with lit
-                    
+                    if (watching_clause->litWatch1 == watching_literal) {
+                        watching_clause->litWatch1 = lit;
+                    } else {
+                        watching_clause->litWatch2 = lit;
+                    }
+                    da_append((*state->lit2Clauses[get_lit2Clauses_ix(lit)]), watching_clause);
+                    da_remove((*state->lit2Clauses[get_lit2Clauses_ix(watching_literal)]), watching_clause);
+                    break;
                 }
             }
-
+            // else
             // We cannot find another literal to watch, so we need to resolve the clause.
+            if (watching_clause->litWatch1 == watching_clause->litWatch2) {
+                return (struct UnitPropagationResult){CLAUSE_STATUS_CONFLICT, watching_clause};
+            }
 
-
-
-
+            int other = watching_clause->litWatch1 == watching_literal ? watching_clause->litWatch2 : watching_clause->litWatch1;
+            if (state->assignments[abs(other)] == NULL) {
+                // Other watched literal is unassigned, so we need to assign it.
+                assign(state->assignments, other, other > 0, watching_clause, state->dl);
+                da_insert((*to_propagate), other, 0);
+            } 
+            else if (state->assignments[abs(other)]->value == other > 0) {
+                // Other watched literal is assigned to true, so we can skip this clause.
+                continue;
+            } 
+            else {
+                return (struct UnitPropagationResult){CLAUSE_STATUS_CONFLICT, watching_clause};
+            }
         }
-         
-
-        i++;
     }
 
-
-    // bool finished = false;
-    // struct Formula* formula = state->formula;
-    // struct Assignment** assignments = state->assignments;
-    // int dl = state->dl;
-
-    // while (!finished) {
-    //     finished = true;
-
-    //     for (int i = 0; i < formula->size; i++) {
-    //         struct Clause clause = formula->clauses[i];
-    //         char status = clause_status(&clause, assignments);
-
-    //         if (status == CLAUSE_STATUS_UNRESOLVED || status == CLAUSE_STATUS_SAT) {
-    //             continue;
-    //         }
-    //         else if (status == CLAUSE_STATUS_UNIT) {
-    //             int unassignedLiteral = unassigned_literal(&clause, assignments);
-    //             assign(assignments, unassignedLiteral, unassignedLiteral >= 0, &clause, dl);
-    //             finished = false;
-    //         }
-    //         else {
-    //             return (struct UnitPropagationResult){CLAUSE_STATUS_CONFLICT, &clause};   
-    //         }
-    //     }
-    // }
-
-    // return (struct UnitPropagationResult){CLAUSE_STATUS_UNRESOLVED, NULL};
-
+    return (struct UnitPropagationResult){CLAUSE_STATUS_UNRESOLVED, NULL};
 }
 
 int pick_branching_literal(struct Assignment** assignments, int n) {

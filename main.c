@@ -2,10 +2,11 @@
 #include "cdcl.h"
 
 int main() {
-    struct Clause clauses[3] = {
+    struct Clause clauses[4] = {
         {(int[]){3}, 1},
         {(int[]){1, 2}, 2},
-        {(int[]){2, 3}, 2}
+        {(int[]){2, 3}, 2},
+        {(int[]){-3, 2}, 2}
     };
 
     struct Formula formula = {clauses, sizeof(clauses) / sizeof(struct Clause)};
