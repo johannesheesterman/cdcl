@@ -3,9 +3,9 @@
 
 int main() {
     struct Clause clauses[3] = {
-        {(int[]){2}, 1},
-        {(int[]){0, 1}, 2},
-        {(int[]){1, 2}, 2}
+        {(int[]){3}, 1},
+        {(int[]){1, 2}, 2},
+        {(int[]){2, 3}, 2}
     };
 
     struct Formula formula = {clauses, sizeof(clauses) / sizeof(struct Clause)};
